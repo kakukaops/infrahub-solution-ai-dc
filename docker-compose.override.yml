@@ -40,6 +40,7 @@ services:
 
   infrahub-mcp:
     image: "${INFRAHUB_MCP_DOCKER_IMAGE:-registry.opsmill.io/opsmill/infrahub-mcp}:${INFRAHUB_MCP_VERSION:-v1.3.0}"
+    init: true
     restart: unless-stopped
     depends_on:
       infrahub-server:

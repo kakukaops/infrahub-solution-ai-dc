@@ -1,0 +1,32 @@
+query ComputeCablingDesign($design_name: String!) {
+  NetworkComputeCablingDesign(name__value: $design_name) {
+    edges {
+      node {
+        id
+        name { value }
+        cabinet_count { value }
+        cabinet_port_count { value }
+        cabinets_per_leaf_pair { value }
+        leaf_port_start { value }
+        leaf_port_end { value }
+        medium { value }
+        cabinet_device_type { node { id name { value } } }
+        roce_fabric {
+          node {
+            id
+            name { value }
+            rule { value }
+            leaf_count { value }
+            spine_count { value }
+            leaf_port_start { value }
+            leaf_port_end { value }
+            spine_port_start { value }
+            spine_port_end { value }
+            leaf_device_type { node { id name { value } } }
+            spine_device_type { node { id name { value } } }
+          }
+        }
+      }
+    }
+  }
+}

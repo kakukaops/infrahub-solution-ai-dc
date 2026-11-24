@@ -1,0 +1,29 @@
+query RoceCablingInventory($ids: [ID!], $deviceLimit: Int!, $offset: Int!, $portLimit: Int!) {
+  NetworkDevice(ids: $ids, limit: $deviceLimit) {
+    edges {
+      node {
+        id
+        interfaces(offset: $offset, limit: $portLimit) {
+          count
+          edges {
+            node {
+              id
+              name { value }
+              compute_cabling_design { node { id } }
+              link {
+                node {
+                  id
+                  name { value }
+                  medium { value }
+                  endpoints(limit: 3) {
+                    edges { node { id } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

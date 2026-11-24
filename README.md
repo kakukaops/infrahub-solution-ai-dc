@@ -87,6 +87,22 @@ Then in the Infrahub UI: navigate to **Actions > Generator Definitions > generat
 
 ---
 
+### Start and stop an existing installation
+
+Use the Bash script to control Docker Compose without Python dependencies.
+Startup uses the configured images with building disabled. Stop allows up to 60 seconds for
+graceful container shutdown and keeps the containers and data volumes.
+
+```bash
+./infrahub-service.sh start
+./infrahub-service.sh status
+./infrahub-service.sh stop
+```
+
+The script defaults to Community. For an Enterprise Compose file, set `INFRAHUB_EDITION=enterprise`
+or pass `--edition enterprise`. The image tag defaults to the version pinned in `uv.lock`.
+Set `INFRAHUB_BASE_VERSION` to use a different tag.
+
 ## AI agent access (MCP server)
 
 The stack includes an Infrahub MCP server as a sidecar, so an AI agent opened at the repository root can query and change live Infrahub data through `mcp__infrahub__*` tools.

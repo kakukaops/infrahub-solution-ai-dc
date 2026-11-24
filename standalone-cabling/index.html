@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RoCE 布线规划</title>
+<link rel="icon" href="data:,">
+<style>
+:root{font:15px/1.5 system-ui,"Microsoft YaHei",sans-serif;color:#182d3a;background:#edf3f5}
+*{box-sizing:border-box}body{margin:0}header{background:#153448;color:white;padding:26px max(24px,calc((100vw - 1152px)/2))}
+h1{font-size:1.8rem;margin:0}main{max-width:1200px;margin:auto;padding:24px}
+form,.output{background:white;border:1px solid #d9e4e9;border-radius:12px;padding:20px;margin-bottom:18px}
+fieldset{border:0;border-top:1px solid #dbe6eb;margin:0 0 18px;padding:8px 0 0;min-inline-size:0}
+legend{font-weight:700;padding:0 10px 0 0}.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px}
+[hidden]{display:none!important}nav{display:flex;gap:18px;margin-top:10px}nav a{color:#e2f6ff}nav a[aria-current=page]{font-weight:bold;text-decoration:none}select{width:100%;padding:8px;font:inherit}.check-table td{white-space:normal;min-width:90px}label{display:grid;gap:5px;font-size:.9rem}input{min-width:0;width:100%;font:inherit;padding:8px;border-radius:6px;border:1px solid #9eb6c3;color:#162f3c;background:#fff}
+input:focus-visible,button:focus-visible{outline:2px solid #246f9c;outline-offset:2px}button{font:inherit;cursor:pointer;border:1px solid #28536a;border-radius:6px;padding:9px 14px;background:white;color:#193749}
+button.primary{background:#05645d;color:white;border-color:#05645d}button:disabled{opacity:.55;cursor:default}.buttons{display:flex;gap:8px;flex-wrap:wrap}
+#status{min-height:1.5em;margin:10px 0 0}.error{color:#9d302b}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;white-space:nowrap;text-align:left;font-size:.87rem}
+th,td{padding:8px 10px;border-bottom:1px solid #dce7eb}th{background:#eff5f6}h2{font-size:1.18rem;margin:0 0 8px}
+</style>
+<header><h1>RoCE 布线规划</h1>
+<nav><a href="/" id="generate-tab">生成布线表</a><a href="/validate" id="check-tab">校验布线表</a></nav></header>
+<main>
+<form id="plan">
+  <fieldset><legend>布线规则</legend><label>选择规则
+    <select id="rule"><option value="both">两段合并</option><option value="uplink">Leaf–Spine 上联</option><option value="downlink">Leaf–计算柜下联</option></select>
+  </label></fieldset>
+  <div id="fields"></div>
+  <fieldset id="upload" hidden><legend>待校验 Excel</legend>
+    <div class="fields">
+      <label>XLSX 文件（首行须是表头）<input id="workbook" type="file" accept=".xlsx" disabled required></label>
+      <label>工作表名称（可空，默认第一张）<input id="sheet" maxlength="31" disabled></label>
+    </div>
+    <p>Leaf 在左，对端在右。端口可填 65:1，或把物理口号和子端口号分开填写。<a id="template" href="/">生成页可导出模板</a>。</p>
+  </fieldset>
+  <div class="buttons">
+    <button class="primary" type="submit" id="preview" disabled>生成预览</button>
+    <button type="button" id="export" disabled>导出 Excel</button>
+    <button type="button" id="reset" disabled>恢复默认参数</button>
+  </div>
+  <p id="status" role="status" aria-live="polite"></p>
+</form>
+<section class="output" id="results" hidden>
+  <h2 id="summary"></h2>
+  <div class="table-wrap"><table aria-label="布线明细示例"><thead></thead><tbody></tbody></table></div>
+</section>
+<section class="output" id="check-results" hidden>
+  <h2 id="check-summary"></h2>
+  <p id="check-counts"></p>
+  <div class="buttons">
+    <button type="button" id="prev">上一页</button>
+    <button type="button" id="next">下一页</button>
+    <button type="button" id="report">下载问题清单（CSV）</button>
+    <span id="page-info"></span>
+  </div>
+  <div class="table-wrap"><table class="check-table" aria-label="校验问题"><thead><tr><th>Excel 行号</th><th>类型</th><th>实际接法</th><th>预期接法</th><th>说明</th></tr></thead><tbody></tbody></table></div>
+</section>
+</main>
+<script>
+const groups = [
+  ["设备数量", [["leaf_count","Leaf 台数"],["spine_count","Spine 台数"],["cabinet_count","计算柜数量"]]],
+  ["Leaf–Spine 上联", [["leaf_start","Leaf 上联起始口"],["leaf_end","Leaf 上联结束口"],["spine_start","Spine 起始口"],["spine_end","Spine 结束口"]]],
+  ["Leaf–计算柜下联", [["downlink_start","Leaf 下联起始口"],["downlink_end","Leaf 下联结束口"],["cabinet_ports","每柜物理端口数"],["cabinets_per_pair","每对 Leaf 接柜数"]]],
+  ["设备编号与型号", [["leaf_prefix","Leaf 编号前缀"],["spine_prefix","Spine 编号前缀"],["cabinet_prefix","计算柜编号前缀"],["leaf_model","Leaf 型号（可空）"],["spine_model","Spine 型号（可空）"],["cabinet_model","计算柜型号（可空）"]]],
+];
+const form = document.querySelector("#plan");
+const fields = document.querySelector("#fields");
+const status = document.querySelector("#status");
+const results = document.querySelector("#results");
+const buttons = [...form.querySelectorAll("button")];
+const inputByKey = new Map();
+let defaults;
+let inFlight = false;
+const checking = location.pathname === "/validate";
+const rule = document.querySelector("#rule");
+const checkResults = document.querySelector("#check-results");
+const workbook = document.querySelector("#workbook");
+const sheet = document.querySelector("#sheet");
+let issues = [];
+let page = 0;
+const pageSize = 100;
+const uplinkOnlyKeys = new Set(["spine_count", "leaf_start", "leaf_end", "spine_start", "spine_end", "spine_prefix", "spine_model"]);
+const downlinkOnlyKeys = new Set(["cabinet_count", "downlink_start", "downlink_end", "cabinet_ports", "cabinets_per_pair", "cabinet_prefix", "cabinet_model"]);
+document.querySelector(checking ? "#check-tab" : "#generate-tab").setAttribute("aria-current", "page");
+if (checking) {
+  document.querySelector("#upload").hidden = false;
+  workbook.disabled = false;
+  sheet.disabled = false;
+  document.querySelector("#preview").textContent = "校验布线表";
+  document.querySelector("#export").hidden = true;
+}
+function applyRule() {
+  for (const [key, input] of inputByKey) {
+    input.disabled = (rule.value === "downlink" && uplinkOnlyKeys.has(key)) ||
+      (rule.value === "uplink" && downlinkOnlyKeys.has(key));
+    input.closest("label").hidden = input.disabled;
+  }
+  for (const fieldset of fields.querySelectorAll("fieldset")) {
+    fieldset.hidden = [...fieldset.querySelectorAll("input")].every(input => input.disabled);
+  }
+}
+function renderIssues() {
+  document.querySelector("#check-results tbody").replaceChildren(
+    ...issues.slice(page * pageSize, (page + 1) * pageSize).map(issue => row(issue.map(v => v ?? "—"), "td")));
+  const pages = Math.max(1, Math.ceil(issues.length / pageSize));
+  document.querySelector("#prev").disabled = page === 0;
+  document.querySelector("#next").disabled = page + 1 >= pages;
+  document.querySelector("#report").disabled = !issues.length;
+  document.querySelector("#page-info").textContent = issues.length ? `第 ${page+1} / ${pages} 页` : "";
+}
+function fileBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",", 2)[1]);
+    reader.onerror = () => reject(new Error("无法读取文件。"));
+    reader.readAsDataURL(file);
+  });
+}
+function saveFile(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+document.querySelector("#prev").onclick = () => { page--; renderIssues(); };
+document.querySelector("#next").onclick = () => { page++; renderIssues(); };
+document.querySelector("#report").onclick = () => {
+  const csvCell = value => {
+    let s = String(value ?? "");
+    if (/^\s*[=+@-]/.test(s)) s = "'" + s;
+    return '"' + s.replaceAll('"', '""') + '"';
+  };
+  const lines = [["Excel 行号","类型","实际接法","预期接法","说明"], ...issues];
+  saveFile(new Blob(["\uFEFF", lines.map(line => line.map(csvCell).join(",")).join("\r\n")],
+    {type:"text/csv;charset=utf-8"}), "roce-validation-issues.csv");
+};
+
+function updateStatus(message, isError = false) {
+  status.textContent = message;
+  status.classList.toggle("error", isError);
+}
+function reset() {
+  for (const [key, input] of inputByKey) input.value = defaults[key];
+  rule.value = defaults.rule;
+  if (checking) { workbook.value = ""; sheet.value = ""; }
+  applyRule();
+  results.hidden = true;
+  checkResults.hidden = true;
+  updateStatus("");
+}
+function row(values, tag) {
+  const tr = document.createElement("tr");
+  for (const value of values) {
+    const cell = document.createElement(tag);
+    cell.textContent = value;
+    tr.append(cell);
+  }
+  return tr;
+}
+async function run(action) {
+  if (inFlight || !form.reportValidity()) return;
+  inFlight = true;
+  buttons.forEach(b => { b.disabled = true; });
+  updateStatus(action === "export" ? "正在生成 Excel…" : action === "check" ? "正在逐行校验…" : "正在校验并生成预览…");
+  try {
+    const params = Object.fromEntries([...inputByKey].map(([key, input]) =>
+      [key, input.disabled ? defaults[key] : input.type === "number" ? input.valueAsNumber : input.value]));
+    params.rule = rule.value;
+    let body = params;
+    if (action === "check") {
+      const file = workbook.files[0];
+      if (!file || !/\.xlsx$/i.test(file.name) || file.size > 20 * 1024 * 1024) {
+        throw new Error("请选择不超过 20 MiB 的 .xlsx 文件。");
+      }
+      body = {params, workbook: await fileBase64(file), sheet: sheet.value.trim()};
+    }
+    const response = await fetch("/" + action, {
+      method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body)
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "操作失败，请重试。");
+    }
+    if (action === "export") {
+      saveFile(await response.blob(), "roce-cabling.xlsx");
+      updateStatus("Excel 已交给浏览器下载。");
+      return;
+    }
+    const preview = await response.json();
+    const fmt = new Intl.NumberFormat("zh-CN");
+    if (action === "check") {
+      issues = preview.issues;
+      page = 0;
+      document.querySelector("#check-summary").textContent = issues.length ? "发现布线问题" : "校验通过";
+      document.querySelector("#check-counts").textContent =
+        `${preview.sheet} · 实际 ${fmt.format(preview.actual)} 行 · 预期 ${fmt.format(preview.expected)} 条 · 匹配 ${fmt.format(preview.matched)} 条` +
+        Object.entries(preview.counts).map(([key, count]) => ` · ${key} ${fmt.format(count)}`).join("");
+      checkResults.hidden = false;
+      renderIssues();
+      updateStatus(issues.length ? "下方列出问题和预期接法。" : "每条预期链路均已匹配。");
+      return;
+    }
+    document.querySelector("#summary").textContent =
+      `共 ${fmt.format(preview.uplink + preview.downlink)} 条子端口连线（上联 ${fmt.format(preview.uplink)} · 下联 ${fmt.format(preview.downlink)}）`;
+    document.querySelector("thead").replaceChildren(row(preview.headers, "th"));
+    document.querySelector("tbody").replaceChildren(...preview.rows.map(values => row(values, "td")));
+    results.hidden = false;
+    updateStatus("参数校验通过。下方显示部分链路。");
+  } catch (error) {
+    results.hidden = true;
+    checkResults.hidden = true;
+    updateStatus(error.message, true);
+  } finally {
+    buttons.forEach(b => { b.disabled = false; });
+    inFlight = false;
+  }
+}
+(async () => {
+  try {
+    const response = await fetch("/defaults");
+    if (!response.ok) throw new Error("无法读取默认参数，请刷新页面重试。");
+    defaults = await response.json();
+    for (const [title, definitions] of groups) {
+      const fieldset = document.createElement("fieldset");
+      const legend = document.createElement("legend");
+      legend.textContent = title;
+      const grid = document.createElement("div");
+      grid.className = "fields";
+      for (const [key, caption] of definitions) {
+        const label = document.createElement("label");
+        label.textContent = caption;
+        const input = document.createElement("input");
+        input.name = key;
+        input.type = typeof defaults[key] === "number" ? "number" : "text";
+        if (input.type === "number") {
+          input.min = 1; input.max = 1000000; input.step = 1; input.required = true;
+        } else {
+          input.maxLength = 100;
+          input.required = key.endsWith("_prefix");
+        }
+        label.append(input);
+        grid.append(label);
+        inputByKey.set(key, input);
+      }
+      fieldset.append(legend, grid);
+      fields.append(fieldset);
+    }
+    reset();
+    buttons.forEach(b => { b.disabled = false; });
+  } catch (error) { updateStatus(error.message, true); }
+})();
+form.addEventListener("submit", event => { event.preventDefault(); run(checking ? "check" : "preview"); });
+form.addEventListener("input", () => { results.hidden = true; checkResults.hidden = true; updateStatus(""); });
+rule.addEventListener("change", applyRule);
+document.querySelector("#export").addEventListener("click", () => run("export"));
+document.querySelector("#reset").addEventListener("click", reset);
+</script>
+</html>

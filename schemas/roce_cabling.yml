@@ -1,0 +1,63 @@
+---
+# yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
+version: "1.0"
+nodes:
+  - name: RoceCablingDesign
+    namespace: Network
+    label: RoCE Cabling Design
+    inherit_from:
+      - GeneratorTarget
+    display_label: name__value
+    human_friendly_id:
+      - name__value
+    include_in_menu: false
+    attributes:
+      - name: name
+        kind: Text
+        unique: true
+      - name: rule
+        kind: Dropdown
+        default_value: paired_ab
+        choices:
+          - name: paired_ab
+            label: Paired A/B
+      - name: leaf_count
+        kind: Number
+      - name: spine_count
+        kind: Number
+      - name: leaf_port_start
+        kind: Number
+      - name: leaf_port_end
+        kind: Number
+      - name: spine_port_start
+        kind: Number
+      - name: spine_port_end
+        kind: Number
+      - name: medium
+        kind: Dropdown
+        default_value: smf
+        choices:
+          - name: smf
+            label: Single-Mode Fibre
+          - name: mmf
+            label: Multi-Mode Fibre
+    relationships:
+      - name: leaf_device_type
+        identifier: roce_design__leaf_type
+        peer: NetworkDeviceType
+        kind: Attribute
+        cardinality: one
+      - name: spine_device_type
+        identifier: roce_design__spine_type
+        peer: NetworkDeviceType
+        kind: Attribute
+        cardinality: one
+extensions:
+  nodes:
+    - kind: NetworkDevice
+      relationships:
+        - name: roce_cabling_design
+          peer: NetworkRoceCablingDesign
+          kind: Attribute
+          cardinality: one
+          optional: true

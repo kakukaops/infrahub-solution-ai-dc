@@ -81,6 +81,8 @@ nodes:
             label: Spine
           - name: leaf
             label: Leaf
+          - name: compute_cabinet
+            label: Compute Cabinet
       - name: asn
         label: ASN
         kind: Number

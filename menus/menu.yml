@@ -35,6 +35,18 @@ spec:
             icon: "mdi:server"
 
           - namespace: Network
+            name: RoceCablingDesign
+            label: RoCE Cabling Designs
+            kind: NetworkRoceCablingDesign
+            icon: "material-symbols:cable"
+
+          - namespace: Network
+            name: ComputeCablingDesign
+            label: Compute Cabinet Cabling Designs
+            kind: NetworkComputeCablingDesign
+            icon: "material-symbols:cable"
+
+          - namespace: Network
             name: Link
             label: Connections
             kind: NetworkLink

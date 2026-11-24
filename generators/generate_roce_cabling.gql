@@ -1,0 +1,20 @@
+query RoceCablingDesign($design_name: String!) {
+  NetworkRoceCablingDesign(name__value: $design_name) {
+    edges {
+      node {
+        id
+        name { value }
+        rule { value }
+        leaf_count { value }
+        spine_count { value }
+        leaf_port_start { value }
+        leaf_port_end { value }
+        spine_port_start { value }
+        spine_port_end { value }
+        medium { value }
+        leaf_device_type { node { id } }
+        spine_device_type { node { id } }
+      }
+    }
+  }
+}

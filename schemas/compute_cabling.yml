@@ -1,0 +1,72 @@
+---
+# yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
+version: "1.0"
+nodes:
+  - name: ComputeCablingDesign
+    namespace: Network
+    label: Compute Cabinet Cabling Design
+    inherit_from:
+      - GeneratorTarget
+      - CoreArtifactTarget
+    display_label: name__value
+    human_friendly_id:
+      - name__value
+    uniqueness_constraints:
+      - [roce_fabric]
+    include_in_menu: false
+    attributes:
+      - name: name
+        kind: Text
+        unique: true
+      - name: cabinet_count
+        kind: Number
+        optional: false
+      - name: cabinet_port_count
+        kind: Number
+        default_value: 32
+      - name: cabinets_per_leaf_pair
+        kind: Number
+        default_value: 4
+      - name: leaf_port_start
+        kind: Number
+        default_value: 1
+      - name: leaf_port_end
+        kind: Number
+        default_value: 64
+      - name: medium
+        kind: Dropdown
+        default_value: smf
+        choices:
+          - name: smf
+            label: Single-Mode Fibre
+          - name: mmf
+            label: Multi-Mode Fibre
+    relationships:
+      - name: roce_fabric
+        optional: false
+        peer: NetworkRoceCablingDesign
+        kind: Attribute
+        cardinality: one
+      - name: cabinet_device_type
+        optional: false
+        peer: NetworkDeviceType
+        kind: Attribute
+        cardinality: one
+extensions:
+  nodes:
+    - kind: NetworkDevice
+      relationships:
+        - name: compute_cabling_design
+          identifier: compute_design__device
+          peer: NetworkComputeCablingDesign
+          kind: Attribute
+          cardinality: one
+          optional: true
+    - kind: NetworkInterface
+      relationships:
+        - name: compute_cabling_design
+          identifier: compute_design__interface
+          peer: NetworkComputeCablingDesign
+          kind: Attribute
+          cardinality: one
+          optional: true

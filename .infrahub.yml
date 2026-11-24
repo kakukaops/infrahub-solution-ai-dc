@@ -24,6 +24,12 @@ queries:
   - name: generate_server
     file_path: "./generators/generate_server.gql"
 
+  - name: generate_roce_cabling
+    file_path: "./generators/generate_roce_cabling.gql"
+
+  - name: generate_compute_cabling
+    file_path: "./generators/generate_compute_cabling.gql"
+
   - name: network_device_startup_config
     file_path: "./transforms/startup_config.gql"
 
@@ -103,6 +109,66 @@ generator_definitions:
         - src/infrahub_solution_ai_dc/vendors.py
         - ./generators/rack_generator_query.py
 
+  - name: validate-roce-cabling
+    file_path: "./generators/generate_roce_cabling.py"
+    query: generate_roce_cabling
+    targets: roce_cabling_designs
+    parameters:
+      design_name: name__value
+    class_name: RoceCablingValidation
+    convert_query_response: false
+    execute_in_proposed_change: false
+    execute_after_merge: false
+    watch:
+      files:
+        - src/infrahub_solution_ai_dc/roce_cabling.py
+        - src/infrahub_solution_ai_dc/protocols.py
+
+  - name: generate-roce-cabling
+    file_path: "./generators/generate_roce_cabling.py"
+    query: generate_roce_cabling
+    targets: roce_cabling_designs
+    parameters:
+      design_name: name__value
+    class_name: RoceCablingGenerator
+    convert_query_response: false
+    execute_in_proposed_change: false
+    execute_after_merge: false
+    watch:
+      files:
+        - src/infrahub_solution_ai_dc/roce_cabling.py
+        - src/infrahub_solution_ai_dc/protocols.py
+
+  - name: validate-compute-cabling
+    file_path: "./generators/generate_compute_cabling.py"
+    query: generate_compute_cabling
+    targets: compute_cabling_designs
+    parameters:
+      design_name: name__value
+    class_name: ComputeCablingValidation
+    convert_query_response: false
+    execute_in_proposed_change: false
+    execute_after_merge: false
+    watch:
+      files:
+        - src/infrahub_solution_ai_dc/roce_cabling.py
+        - src/infrahub_solution_ai_dc/protocols.py
+
+  - name: generate-compute-cabling
+    file_path: "./generators/generate_compute_cabling.py"
+    query: generate_compute_cabling
+    targets: compute_cabling_designs
+    parameters:
+      design_name: name__value
+    class_name: ComputeCablingGenerator
+    convert_query_response: false
+    execute_in_proposed_change: false
+    execute_after_merge: false
+    watch:
+      files:
+        - src/infrahub_solution_ai_dc/roce_cabling.py
+        - src/infrahub_solution_ai_dc/protocols.py
+
   - name: generate-tenant
     file_path: "./generators/generate_tenant.py"
     query: generate_tenant
@@ -158,6 +224,22 @@ jinja2_transforms:
     template_path: "./transforms/templates/startup_config_juniper.j2"
 
 python_transforms:
+  - name: combined_roce_cabling_plan
+    class_name: CombinedRoceCablingPlanCSV
+    file_path: "./generators/generate_compute_cabling.py"
+    watch:
+      files:
+        - src/infrahub_solution_ai_dc/roce_cabling.py
+        - src/infrahub_solution_ai_dc/protocols.py
+
+  - name: compute_cabinet_cabling_plan
+    class_name: ComputeCablingPlanCSV
+    file_path: "./generators/generate_compute_cabling.py"
+    watch:
+      files:
+        - src/infrahub_solution_ai_dc/roce_cabling.py
+        - src/infrahub_solution_ai_dc/protocols.py
+
   - name: computed_interface_description
     class_name: ComputedInterfaceDescription
     file_path: ./transforms/computed_interface_description.py
@@ -190,6 +272,22 @@ python_transforms:
         - src/infrahub_solution_ai_dc/protocols.py
 
 artifact_definitions:
+  - name: combined_roce_cabling_plan
+    artifact_name: "Combined RoCE Cabling Plan"
+    parameters:
+      design_name: name__value
+    content_type: "text/csv"
+    targets: "compute_cabling_designs"
+    transformation: "combined_roce_cabling_plan"
+
+  - name: compute_cabinet_cabling_plan
+    artifact_name: "Compute Cabinet Cabling Plan"
+    parameters:
+      design_name: name__value
+    content_type: "text/csv"
+    targets: "compute_cabling_designs"
+    transformation: "compute_cabinet_cabling_plan"
+
   - name: "cisco_startup_configuration"
     artifact_name: "Startup configuration"
     parameters:

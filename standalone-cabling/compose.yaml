@@ -1,0 +1,17 @@
+---
+name: standalone-cabling
+
+services:
+  cabling:
+    image: ${CABLING_IMAGE:-standalone-cabling:1.0}
+    build: .
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${CABLING_BIND_ADDRESS:-127.0.0.1}:${CABLING_PORT:-8088}:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8080/defaults', timeout=3).close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
